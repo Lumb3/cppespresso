@@ -1,7 +1,9 @@
-/** @brief  Executable main file
-* @author Erkhembileg Ariunbold
-* @date: 2026.04.11
-*/
+/**
+* @file main.cpp
+ * @brief  Executable main file
+ * @author Erkhembileg Ariunbold
+ * @date: 2026.04.11
+ */
 
 #include <iostream>
 #include "Server.h"
