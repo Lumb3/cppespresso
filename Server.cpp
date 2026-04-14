@@ -17,7 +17,7 @@
 
 
 /**
- * Global mutex object to protect shared data
+ * @brief Global mutex object to protect shared data
  */
 std::mutex consoleMutex;
 /**
@@ -28,12 +28,43 @@ std::mutex consoleMutex;
 void Server::HandleClient(int clientSocket) {
     // Read the HTTP request
     char buffer[Buffer_size] = {};
-    read(clientSocket, buffer, sizeof(buffer) - 1);
+    ssize_t bytesRead = read(clientSocket, buffer, sizeof(buffer) - 1);
+
+    if (bytesRead < 0) {
+        perror("Read failed");
+    } else if (bytesRead == 0) {
+        printf("Client Disconnected\n");
+    } else {
+       std::string request(buffer);
+
+        if (request.rfind("POST", 0) == 0) {
+            std::lock_guard<std::mutex> lock(consoleMutex);
+
+            // Print headers (everything before the blank line \r\n\r\n)
+            auto headerEnd = request.find("\r\n\r\n");
+            std::string headers = request.substr(0, headerEnd);
+            std::cout << "=== POST Request Headers ===\n" << headers << "\n";
+
+            // Print body (everything after the blank line)
+            if (headerEnd != std::string::npos) {
+                std::string body = request.substr(headerEnd + 4);
+                std::cout << "=== POST Request Body ===\n" << body << "\n\n";
+            }
+        }
+    }
+
+    // Ignore favicon requests from the browser
+    if (std::string(buffer).find("GET /favicon.ico") != std::string::npos) {
+        ::close(clientSocket);
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(consoleMutex);
         clientCount++;
         std::cout << "Thread " << std::this_thread::get_id() << " handling request:\n"
         << buffer << std::endl;
+        std::cout << "Active clients: " << clientCount << std::endl;
     }
 
     // Send a basic response to each user
@@ -48,6 +79,7 @@ void Server::HandleClient(int clientSocket) {
     send(clientSocket, response.c_str(), response.size(), 0);
     ::close(clientSocket);
 }
+
 
 /**
  * @brief Starts the server by creating a socket and listening on the specified port.

@@ -9,7 +9,7 @@
 #define CPPESPRESSO_SERVER_H
 
 #include <atomic>
-
+#include <string>
 /// @brief Size (in bytes) of the buffer used by the server.
 constexpr int Buffer_size = 4096;
 
@@ -35,12 +35,15 @@ class Server {
     std::atomic<int> serverSocket = -1;
 
     /**
-     *
-     * @param clientSocket
+     * Number of connected clients (thread count)
      */
-     void HandleClient(int clientSocket);
-
     int clientCount = 0;
+    /**
+    *
+    * @param clientSocket
+    */
+    void HandleClient(int clientSocket);
+
 public:
     /**
      * @brief Constructs a Server instance.
