@@ -21,65 +21,70 @@
  */
 std::mutex consoleMutex;
 /**
- * A method for concurrently handling new client using threads.
+ * A method for concurrently handling a new client using threads and user requests.
  *
  * @param clientSocket
  */
 void Server::HandleClient(int clientSocket) {
-    // Read the HTTP request
     char buffer[Buffer_size] = {};
     ssize_t bytesRead = read(clientSocket, buffer, sizeof(buffer) - 1);
 
-    if (bytesRead < 0) {
-        perror("Read failed");
-    } else if (bytesRead == 0) {
-        printf("Client Disconnected\n");
-    } else {
-       std::string request(buffer);
-
-        if (request.rfind("POST", 0) == 0) {
-            std::lock_guard<std::mutex> lock(consoleMutex);
-
-            // Print headers (everything before the blank line \r\n\r\n)
-            auto headerEnd = request.find("\r\n\r\n");
-            std::string headers = request.substr(0, headerEnd);
-            std::cout << "=== POST Request Headers ===\n" << headers << "\n";
-
-            // Print body (everything after the blank line)
-            if (headerEnd != std::string::npos) {
-                std::string body = request.substr(headerEnd + 4);
-                std::cout << "=== POST Request Body ===\n" << body << "\n\n";
-            }
-        }
-    }
-
-    // Ignore favicon requests from the browser
-    if (std::string(buffer).find("GET /favicon.ico") != std::string::npos) {
-        ::close(clientSocket);
+    if (bytesRead <= 0) {
+        close(clientSocket);
         return;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(consoleMutex);
-        clientCount++;
-        std::cout << "Thread " << std::this_thread::get_id() << " handling request:\n"
-        << buffer << std::endl;
-        std::cout << "Active clients: " << clientCount << std::endl;
-    }
+    std::string raw(buffer);
 
-    // Send a basic response to each user
-    std::string response =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/plain\r\n"
-      "Connection: close\r\n"
-      "\r\n"
-      "Hello from my HTTP server!\n"
-      "Active clients: " + std::to_string(clientCount);
+    auto request = parseRequest(raw);
+    auto response = handleRoute(request);
 
-    send(clientSocket, response.c_str(), response.size(), 0);
-    ::close(clientSocket);
+    std::string responseStr = response.toString();
+    send(clientSocket, responseStr.c_str(), responseStr.size(), 0);
+
+    close(clientSocket);
 }
 
+/**
+ *
+ * @param raw
+ * @return
+ */
+Server::HttpRequest Server::parseRequest(const std::string& raw) {
+    Server::HttpRequest req;
+
+    auto firstLineEnd = raw.find("\r\n");
+    std::string firstLine = raw.substr(0, firstLineEnd);
+
+    size_t methodEnd = firstLine.find(' ');
+    size_t pathEnd = firstLine.find(' ', methodEnd + 1);
+
+    req.method = firstLine.substr(0, methodEnd);
+    req.path = firstLine.substr(methodEnd + 1, pathEnd - methodEnd - 1);
+
+    auto headerEnd = raw.find("\r\n\r\n");
+    if (headerEnd != std::string::npos) {
+        req.headers = raw.substr(0, headerEnd);
+        req.body = raw.substr(headerEnd + 4);
+    }
+
+    return req;
+}
+
+Server::HttpResponse Server::handleRoute(const Server::HttpRequest& req) {
+    Server::HttpResponse res;
+
+    if (req.method == "POST" && req.path == "/") {
+        res.body = "Received POST:\n" + req.body;
+    } else if (req.path == "/health") {
+        res.body = "OK";
+    } else {
+        res.status = 404;
+        res.body = "Not Found";
+    }
+
+    return res;
+}
 
 /**
  * @brief Starts the server by creating a socket and listening on the specified port.

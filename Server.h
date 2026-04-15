@@ -37,14 +37,42 @@ class Server {
     /**
      * Number of connected clients (thread count)
      */
-    int clientCount = 0;
+    std::atomic<int> clientCount = 0;
     /**
+    * A method for concurrently handling a new client using threads.
     *
     * @param clientSocket
     */
     void HandleClient(int clientSocket);
 
 public:
+    struct HttpRequest {
+        std::string method;
+        std::string path;
+        std::string headers;
+        std::string body;
+    };
+
+    struct HttpResponse {
+        int status = 200;
+        std::string contentType = "text/plain";
+        std::string body;
+
+        std::string statusText = (status == 200) ? "OK" :
+                                 (status == 404) ? "Not Found" :
+                                 (status == 500) ? "Internal Server Error" : "Unknown";
+        std::string toString() const {
+            return "HTTP/1.1 " + std::to_string(status) + " " + statusText + "\r\n"
+                   "Content-Type: " + contentType + "\r\n"
+                   "Content-Length: " + std::to_string(body.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" +
+                   body;
+        }
+    };
+
+    HttpRequest parseRequest(const std::string& raw);
+    HttpResponse handleRoute(const HttpRequest& req);
+
     /**
      * @brief Constructs a Server instance.
      * Initializes the server in a non-running state.
