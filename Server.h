@@ -35,7 +35,7 @@ class Server {
     std::atomic<int> serverSocket = -1;
 
     /**
-     * Number of connected clients (thread count)
+     * Number of connected clients (thread count) TODO: Remove this variable after thread debugging
      */
     std::atomic<int> clientCount = 0;
     /**

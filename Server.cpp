@@ -33,7 +33,12 @@ void Server::HandleClient(int clientSocket) {
         close(clientSocket);
         return;
     }
-
+    // TODO: Remove this line after thread debugging
+    {
+        std::lock_guard<std::mutex> lock(consoleMutex);
+        this->clientCount++;
+        std::cout << "Total Number of Connected Clients: " << this->clientCount << std::endl;
+    }
     std::string raw(buffer);
 
     auto request = parseRequest(raw);
@@ -42,6 +47,12 @@ void Server::HandleClient(int clientSocket) {
     std::string responseStr = response.toString();
     send(clientSocket, responseStr.c_str(), responseStr.size(), 0);
 
+    // TODO: Remove this line after thread debugging
+    {
+        std::lock_guard<std::mutex> lock(consoleMutex);
+        this->clientCount--;
+        std::cout << "Total Number of Connected Clients After the Server Response: " << this->clientCount << std::endl;
+    }
     close(clientSocket);
 }
 
@@ -118,7 +129,7 @@ void Server::Connect(int port) {
     }
 
     // 4. Listen for connections
-    if (listen(this->serverSocket, 10) < 0) { // maximums of 10 pending connections are allowed
+    if (::listen(this->serverSocket, 10) < 0) { // maximums of 10 pending connections are allowed
         throw std::runtime_error("Failed to listen on socket");
     }
 
@@ -128,7 +139,7 @@ void Server::Connect(int port) {
         sockaddr_in clientAddr;
         socklen_t clientAddrLength = sizeof(clientAddr);
 
-        int clientSocket = accept(this->serverSocket, (sockaddr*)& clientAddr, &clientAddrLength);
+        int clientSocket = ::accept(this->serverSocket, (sockaddr*)& clientAddr, &clientAddrLength);
         if (clientSocket < 0) {
             if (!this->is_running) break; // Exit from the loop if server is not active anymore
             std::cout << "Failed to accept connection" << std::endl;
@@ -155,7 +166,7 @@ void Server::Disconnect() {
         close(fd);
         {
             std::lock_guard<std::mutex> lock(consoleMutex);
-            std::cout<<"\n Total Client count: "  + std::to_string(clientCount) << std::endl;
+            std::cout<<"\nTotal Client count: "  + std::to_string(clientCount) << std::endl;
         }
     }
 }
