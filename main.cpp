@@ -8,18 +8,18 @@
 #include <iostream>
 #include "Server.h"
 #include <csignal>
+#include <atomic>
+
+static std::atomic <bool> shouldStop{false};
 
 constexpr int Default_port = 8080;
-static Server *global_server = nullptr;
 
 /**
  * @brief Listens for the Ctrl+C (shut down) signal from the keyboard
  * @param signum Signal number passed by the OS (unused)
  */
 static void shutDownController(int) {
-    if (global_server) {
-        global_server->Disconnect();
-    }
+    shouldStop = true;
 }
 
 /**
@@ -35,12 +35,16 @@ int main (int argc, char* argv[]) {
 
     try {
         Server server;
-
-        /// global_server points to the server instance on the stack,
-        /// allowing shutDownController() to call Disconnect() on it.
-        global_server = &server;
         std::signal(SIGINT, shutDownController);
-        server.Connect(port);
+
+        // Run Connect() on a background thread
+        std::thread serverThread([&]() {server.Connect(port);});
+
+        while (!shouldStop) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        server.Disconnect();
+        serverThread.join(); // blocks the main thread to continue moving on
 
     } catch (const std::exception& e) {
         std::cout << "Server error: " << e.what() << std::endl;
