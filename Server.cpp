@@ -1,69 +1,76 @@
 /**
-* @file Server.cpp
- * @brief  Server Class Implementation
+ * @file Server.cpp
+ * @brief Server class implementation.
  * @author Erkhembileg Ariunbold
- * @date: 2026.04.11
+ * @date 2026-04-11
  */
 
 #include "Server.h"
-#include <sys/socket.h>
+
+#include <iostream>
+#include <netinet/in.h>
 #include <stdexcept>
 #include <string>
-#include <netinet/in.h>
-#include <iostream>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
-#include <thread>
-#include <mutex>
 
 
-/**
- * @brief Global mutex object to protect shared data
- */
-std::mutex consoleMutex;
-/**
- * A method for concurrently handling a new client using threads and user requests.
- *
- * @param clientSocket
- */
+// -----------------------------------------------------------------------------
+// Client handling
+// -----------------------------------------------------------------------------
+
 void Server::HandleClient(int clientSocket) {
-    char buffer[Buffer_size] = {};
-    ssize_t bytesRead = read(clientSocket, buffer, sizeof(buffer) - 1);
+    // Prevent a slow or stalled client from holding a worker thread forever.
+    struct timeval timeout{5, 0};
+    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
-    if (bytesRead <= 0) {
-        close(clientSocket);
-        return;
-    }
-    // TODO: Remove this line after thread debugging
-    {
-        std::lock_guard<std::mutex> lock(consoleMutex);
-        this->clientCount++;
-        std::cout << "Total Number of Connected Clients: " << this->clientCount << std::endl;
-    }
-    std::string raw(buffer);
+    std::string raw;
+    char buffer[Buffer_size];
 
-    auto request = parseRequest(raw);
+    // Read in a loop: a single read() call may not deliver the full request.
+    while (true) {
+        ssize_t bytesRead = read(clientSocket, buffer, sizeof(buffer) - 1);
+        if (bytesRead <= 0) {
+            // Connection closed early or timeout — nothing to respond to.
+            close(clientSocket);
+            return;
+        }
+        buffer[bytesRead] = '\0'; // null at the end of the buffer
+        raw += buffer;
+
+        // Wait until the blank line separating headers from body has arrived.
+        auto headerEnd = raw.find("\r\n\r\n");
+        if (headerEnd == std::string::npos) continue; // If there seperator is not found, skip the iteration
+
+        // Once headers are complete, determine how many body bytes are expected.
+        size_t contentLength = 0;
+        auto clPos= raw.find("Content-Length: ");
+        if (clPos != std::string::npos) {
+            contentLength = std::stoul(raw.substr(clPos + 16)); // Get the length of the content
+        }
+
+        // Stop reading once the declared body length has been received.
+        size_t bodyReceived = raw.size() - (headerEnd + 4);
+        if (bodyReceived >= contentLength) break;
+    }
+
+    auto request  = parseRequest(raw);
     auto response = handleRoute(request);
 
     std::string responseStr = response.toString();
     send(clientSocket, responseStr.c_str(), responseStr.size(), 0);
-
-    // TODO: Remove this line after thread debugging
-    {
-        std::lock_guard<std::mutex> lock(consoleMutex);
-        this->clientCount--;
-        std::cout << "Total Number of Connected Clients After the Server Response: " << this->clientCount << std::endl;
-    }
     close(clientSocket);
 }
 
-/**
- *
- * @param raw
- * @return
- */
-Server::HttpRequest Server::parseRequest(const std::string& raw) {
-    Server::HttpRequest req;
+// -----------------------------------------------------------------------------
+// Request parsing
+// -----------------------------------------------------------------------------
 
+Server::HttpRequest Server::parseRequest(const std::string& raw) {
+    HttpRequest req;
+
+    // First line: "METHOD path HTTP/1.1"
     auto firstLineEnd = raw.find("\r\n");
     std::string firstLine = raw.substr(0, firstLineEnd);
 
@@ -73,6 +80,7 @@ Server::HttpRequest Server::parseRequest(const std::string& raw) {
     req.method = firstLine.substr(0, methodEnd);
     req.path = firstLine.substr(methodEnd + 1, pathEnd - methodEnd - 1);
 
+    // Everything before the blank line is the header block; everything after is the body.
     auto headerEnd = raw.find("\r\n\r\n");
     if (headerEnd != std::string::npos) {
         req.headers = raw.substr(0, headerEnd);
@@ -82,91 +90,134 @@ Server::HttpRequest Server::parseRequest(const std::string& raw) {
     return req;
 }
 
-Server::HttpResponse Server::handleRoute(const Server::HttpRequest& req) {
-    Server::HttpResponse res;
+// -----------------------------------------------------------------------------
+// Routing
+// -----------------------------------------------------------------------------
 
-    if (req.method == "POST" && req.path == "/") {
-        res.body = "Received POST:\n" + req.body;
+Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
+    HttpResponse res;
+
+    if (req.method == "POST" && req.path == "/about") {
+        res.body = "Received POST from about page:\n" + req.body;
     } else if (req.path == "/health") {
         res.body = "OK";
     } else {
         res.status = 404;
-        res.body = "Not Found";
+        res.body   = "Not Found";
     }
 
     return res;
 }
 
-/**
- * @brief Starts the server by creating a socket and listening on the specified port.
- *
- * Initializes the server socket, binds it to the given port, and begins
- * listening for incoming client connections. The server runs continuously
- * until a termination signal (e.g., CTRL+C) triggers Disconnect().
- *
- * @param port The port number on which the server will listen for connections.
- */
+// -----------------------------------------------------------------------------
+// Thread pool
+// -----------------------------------------------------------------------------
+
+void Server::WorkerLoop() {
+    while (poolRunning) {
+        int clientSocket = -1;
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+
+            // Sleep until there is work to do or the pool is shutting down.
+            queueCV.wait(lock, [this] {
+                return !taskQueue.empty() || !poolRunning;
+            });
+
+            // Exit if the pool is stopping and there is nothing left to handle.
+            if (!poolRunning && taskQueue.empty()) return;
+
+            clientSocket = taskQueue.front(); // initialize the most recent work's ClientSocket
+            taskQueue.pop();
+        }
+
+        HandleClient(clientSocket);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Lifecycle
+// -----------------------------------------------------------------------------
+
 void Server::Connect(int port) {
-    // 1. Create socket: IPv4 protocol (server address), TCP socket
+    // Create a TCP/IPv4 socket.
     this->serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (this->serverSocket < 0) {
         throw std::runtime_error("Failed to create socket.");
     }
 
-    // Allow port reuse to avoid "Address already in use" errors
+    // Allow immediate reuse of the port after the server restarts.
     int opt = 1;
     setsockopt(this->serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    // 2. Defining server address
+    // Bind to all interfaces on the requested port.
     sockaddr_in serverAddress{};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(port);
+    serverAddress.sin_family      = AF_INET;
+    serverAddress.sin_port        = htons(port);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
-    // 3. Bind to port (create a unique listening port on a machine)
     if (::bind(this->serverSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
-        throw std::runtime_error("Failed to bind(listen) to port " + std::to_string(port));
+        throw std::runtime_error("Failed to bind to port " + std::to_string(port));
     }
 
-    // 4. Listen for connections
-    if (::listen(this->serverSocket, 10) < 0) { // maximums of 10 pending connections are allowed
-        throw std::runtime_error("Failed to listen on socket");
+    // Allow up to 10 connections to queue while a worker is busy.
+    if (::listen(this->serverSocket, 10) < 0) {
+        throw std::runtime_error("Failed to listen on socket.");
     }
 
-    // 5. Accept and handle connections in an infinite loop
+    // Start the worker pool before entering the accept loop so no connection
+    // is queued without a thread ready to pick it up.
+    poolRunning = true;
+    for (int i = 0; i < THREAD_POOL_SIZE; ++i) {
+        workerThreads.emplace_back(&Server::WorkerLoop, this);
+    }
+
+    std::cout << "Server listening on port " << port << std::endl;
+
+    // Accept loop — blocks until Disconnect() closes the socket.
     this->is_running = true;
-    while(this->is_running) {
-        sockaddr_in clientAddr;
-        socklen_t clientAddrLength = sizeof(clientAddr);
+    while (this->is_running) {
+        sockaddr_in clientAddr{};
+        socklen_t   clientAddrLen = sizeof(clientAddr);
 
-        int clientSocket = ::accept(this->serverSocket, (sockaddr*)& clientAddr, &clientAddrLength);
+        int clientSocket = ::accept(
+            this->serverSocket,
+            (sockaddr*)&clientAddr,
+            &clientAddrLen
+        );
+
         if (clientSocket < 0) {
-            if (!this->is_running) break; // Exit from the loop if server is not active anymore
-            std::cout << "Failed to accept connection" << std::endl;
+            if (!this->is_running) break; // Normal shutdown path.
+            std::cerr << "Failed to accept connection." << std::endl;
             continue;
         }
 
-        std::thread t(&Server::HandleClient, this, clientSocket);
-        t.detach();
+        // Hand the socket off to the pool without blocking the accept loop.
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            taskQueue.push(clientSocket); // put the socket in the queue
+        }
+        queueCV.notify_one(); // wake exactly one sleeping worker
     }
 
     close(this->serverSocket);
-    std::cout << "\nServer shut down" << std::endl;
+    std::cout << "\nServer shut down." << std::endl;
 }
 
-/**
- * Disconnects the server by shutting down the current connection
- * and releasing associated resources. Marks the server as no longer
- * running and closes the server's active socket if it is open.
- */
 void Server::Disconnect() {
     this->is_running = false;
-    int fd = this->serverSocket.exchange(-1); // write serverSocket back to -1 after the condition
-    if (fd != -1) { // Close the connection if server has socket
+
+    // Atomically swap the fd to -1 so no other thread closes it a second time.
+    int fd = this->serverSocket.exchange(-1);
+    if (fd != -1) {
         close(fd);
-        {
-            std::lock_guard<std::mutex> lock(consoleMutex);
-            std::cout<<"\nTotal Client count: "  + std::to_string(clientCount) << std::endl;
-        }
     }
+
+    // Signal all workers to wake up and check poolRunning, then join them.
+    poolRunning = false;
+    queueCV.notify_all();
+    for (auto& thread : workerThreads) {
+        thread.join();
+    }
+    workerThreads.clear();
 }
