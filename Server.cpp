@@ -200,7 +200,7 @@ void Server::Connect(int port) {
         queueCV.notify_one(); // wake exactly one sleeping worker
     }
 
-    close(this->serverSocket);
+    ::close(this->serverSocket);
     std::cout << "\nServer shut down." << std::endl;
 }
 
@@ -220,4 +220,8 @@ void Server::Disconnect() {
         thread.join();
     }
     workerThreads.clear();
+}
+
+Server::~Server() {
+    // TODO: Implement the cleaning-up code
 }

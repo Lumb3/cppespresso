@@ -206,6 +206,8 @@ public:
      * signal handler or a separate thread.
      */
     void Disconnect();
+
+    ~Server();
 };
 
 #endif // CPPESPRESSO_SERVER_H
