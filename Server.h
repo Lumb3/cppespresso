@@ -20,19 +20,7 @@
 constexpr int Buffer_size = 4096;
 
 /**
- * @class Server
- * @brief A multithreaded HTTP/1.1 server using a fixed-size thread pool.
  *
- * Accepts incoming TCP connections on a given port and dispatches each
- * client socket to a pool of worker threads. Supports basic routing for
- * GET and POST requests. Call Connect() to start and Disconnect() to stop.
- *
- * Example usage:
- * @code
- *   Server server;
- *   std::signal(SIGINT, [](int) { server.Disconnect(); });
- *   server.Connect(8080);
- * @endcode
  */
 class Server {
 
@@ -207,6 +195,9 @@ public:
      */
     void Disconnect();
 
+    /**
+     *  Destructor that Disconnects server when it is running.
+     */
     ~Server();
 };
 

@@ -16,10 +16,7 @@
 #include <unistd.h>
 
 
-// -----------------------------------------------------------------------------
 // Client handling
-// -----------------------------------------------------------------------------
-
 void Server::HandleClient(int clientSocket) {
     // Prevent a slow or stalled client from holding a worker thread forever.
     struct timeval timeout{5, 0};
@@ -63,10 +60,8 @@ void Server::HandleClient(int clientSocket) {
     close(clientSocket);
 }
 
-// -----------------------------------------------------------------------------
-// Request parsing
-// -----------------------------------------------------------------------------
 
+// Request parsing
 Server::HttpRequest Server::parseRequest(const std::string& raw) {
     HttpRequest req;
 
@@ -90,10 +85,8 @@ Server::HttpRequest Server::parseRequest(const std::string& raw) {
     return req;
 }
 
-// -----------------------------------------------------------------------------
-// Routing
-// -----------------------------------------------------------------------------
 
+// Routing
 Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
     HttpResponse res;
 
@@ -109,10 +102,8 @@ Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
     return res;
 }
 
-// -----------------------------------------------------------------------------
-// Thread pool
-// -----------------------------------------------------------------------------
 
+// Thread pool
 void Server::WorkerLoop() {
     while (poolRunning) {
         int clientSocket = -1;
@@ -135,10 +126,7 @@ void Server::WorkerLoop() {
     }
 }
 
-// -----------------------------------------------------------------------------
 // Lifecycle
-// -----------------------------------------------------------------------------
-
 void Server::Connect(int port) {
     // Create a TCP/IPv4 socket.
     this->serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -223,5 +211,7 @@ void Server::Disconnect() {
 }
 
 Server::~Server() {
-    // TODO: Implement the cleaning-up code
+    if (is_running || poolRunning) {
+        this->Disconnect();
+    }
 }

@@ -9,6 +9,8 @@
 #include "Server.h"
 #include <csignal>
 #include <atomic>
+#include <thread>
+#include <chrono>
 
 static std::atomic <bool> shouldStop{false};
 
@@ -36,6 +38,7 @@ int main (int argc, char* argv[]) {
     try {
         Server server;
         std::signal(SIGINT, shutDownController);
+        std::signal(SIGTERM, shutDownController); // docket stop, systemtcl stop
 
         // Run Connect() on a background thread
         std::thread serverThread([&]() {server.Connect(port);});
