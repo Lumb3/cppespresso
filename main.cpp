@@ -33,7 +33,7 @@ int main (int argc, char* argv[]) {
     // Use default port if none provided
     int port = (argc >= 2) ? std::stoi(argv[1]) : Default_port;
 
-    std::cout << "Listening on port: " << port << "..." << std::endl;
+    std::clog << "Listening on port: " << port << "..." << std::endl;
 
     try {
         Server server;

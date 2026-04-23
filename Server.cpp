@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <fstream>
 
 
 // Client handling
@@ -85,6 +86,29 @@ Server::HttpRequest Server::parseRequest(const std::string& raw) {
     return req;
 }
 
+// Resolve the requested path
+std::string Server::ResolvePath(const std::string &requestedPath) {
+    if (requestedPath == "/index") {
+        return "./public/index.html";
+    }
+    return "/"; // Return the default path if not found
+}
+
+Server::HttpResponse Server::serveFile(const std::string &path) {
+    HttpResponse res;
+    if (path == "/") {
+        return res;
+    }
+    std::ifstream file(path, std::ios::binary);
+    if (file) {
+        res.body = std::string(std::istreambuf_iterator<char>(file), {});
+        res.contentType = getMimeType(path);
+    } else {
+        res.status = 404;
+        res.body = "Not Found";
+    }
+    return res;
+}
 
 // Routing
 Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
@@ -94,7 +118,17 @@ Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
         res.body = "Received POST from about page:\n" + req.body;
     } else if (req.path == "/health") {
         res.body = "OK";
-    } else {
+    } else if (req.method == "GET") {
+        std::string filePath = this->ResolvePath(req.path);
+
+        if (filePath.find("..") != std::string::npos) {
+            res.status = 403;
+            res.body = "Forbidden";
+            return res;
+        }
+        return this->serveFile(filePath);
+    }
+    else {
         res.status = 404;
         res.body   = "Not Found";
     }
@@ -102,6 +136,23 @@ Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
     return res;
 }
 
+// Maps a file extension to its MIME type for the Content-Type header.
+std::string Server::getMimeType(const std::string& path) {
+    auto dot = path.rfind('.');
+    if (dot == std::string::npos) return "application/octet-stream";
+
+    std::string ext = path.substr(dot);
+    if (ext == ".html" || ext == ".htm") return "text/html";
+    if (ext == ".css")                   return "text/css";
+    if (ext == ".js")                    return "application/javascript";
+    if (ext == ".json")                  return "application/json";
+    if (ext == ".png")                   return "image/png";
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".svg")                   return "image/svg+xml";
+    if (ext == ".ico")                   return "image/x-icon";
+    if (ext == ".txt")                   return "text/plain";
+    return "application/octet-stream";  // safe default for unknown types
+}
 
 // Thread pool
 void Server::WorkerLoop() {
@@ -160,7 +211,7 @@ void Server::Connect(int port) {
         workerThreads.emplace_back(&Server::WorkerLoop, this);
     }
 
-    std::cout << "Server listening on port " << port << std::endl;
+    std::clog << "Server listening on port " << port << std::endl;
 
     // Accept loop — blocks until Disconnect() closes the socket.
     this->is_running = true;
@@ -176,7 +227,7 @@ void Server::Connect(int port) {
 
         if (clientSocket < 0) {
             if (!this->is_running) break; // Normal shutdown path.
-            std::cerr << "Failed to accept connection." << std::endl;
+            std::clog << "Failed to accept connection \n";
             continue;
         }
 
@@ -189,7 +240,7 @@ void Server::Connect(int port) {
     }
 
     ::close(this->serverSocket);
-    std::cout << "\nServer shut down." << std::endl;
+    std::clog << "\nServer shut down." << std::endl;
 }
 
 void Server::Disconnect() {
