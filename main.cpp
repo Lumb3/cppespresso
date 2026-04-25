@@ -42,11 +42,11 @@ int main (int argc, char* argv[]) {
 
             // Wait until either a stop or a reload is requested
             while (!Controller::shouldStop && !Controller::shouldReload) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1100));
             }
 
             server.Disconnect();
-            serverThread.join();
+            serverThread.join(); // blocks the main thread to continue moving on
 
             if (Controller::shouldReload && !Controller::shouldStop) {
                 std::clog << "[Reload] Restarting server on port "
