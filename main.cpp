@@ -8,19 +8,10 @@
 #include <iostream>
 #include "Server.h"
 #include <csignal>
-#include <atomic>
+#include "Controller.h"
+#include <thread>
+#include <chrono>
 
-static std::atomic <bool> shouldStop{false};
-
-constexpr int Default_port = 8080;
-
-/**
- * @brief Listens for the Ctrl+C (shut down) signal from the keyboard
- * @param signum Signal number passed by the OS (unused)
- */
-static void shutDownController(int) {
-    shouldStop = true;
-}
 
 /**
  * @param argc number of input commands from the CLI
@@ -28,26 +19,44 @@ static void shutDownController(int) {
  * @return EXIT Code of 1 for Failure and 0 for Success
  */
 int main (int argc, char* argv[]) {
+    Controller control;
     // Use default port if none provided
-    int port = (argc >= 2) ? std::stoi(argv[1]) : Default_port;
+    int port = (argc >= 2) ? std::stoi(argv[1]) : control.getDefaultPort();
 
-    std::cout << "Listening on port: " << port << "..." << std::endl;
+    std::clog << "Listening on port " << port
+             << " | Ctrl+C = stop | Ctrl+R = reload\n";
+
+    std::signal(SIGINT, Controller::shutDownController);
+    std::signal(SIGTERM, Controller::shutDownController); // docket stop, systemtcl stop
+
+    // Start the keyboard listener as a detached background thread.
+    // It owns raw-mode and cleans up when shouldStop becomes true.
+    std::thread kbThread(&Controller::keyboardListener, &control);
+    kbThread.detach();
 
     try {
-        Server server;
-        std::signal(SIGINT, shutDownController);
+        while (!Controller::shouldStop) {
+            Controller::shouldReload = false;
+            Server server;
+            std::thread serverThread([&]() { server.Connect(port); });
 
-        // Run Connect() on a background thread
-        std::thread serverThread([&]() {server.Connect(port);});
+            // Wait until either a stop or a reload is requested
+            while (!Controller::shouldStop && !Controller::shouldReload) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            }
 
-        while (!shouldStop) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            server.Disconnect();
+            serverThread.join(); // blocks the main thread to continue moving on
+
+            if (Controller::shouldReload && !Controller::shouldStop) {
+                std::clog << "[Reload] Restarting server on port "
+                          << port << "...\n";
+            }
         }
-        server.Disconnect();
-        serverThread.join(); // blocks the main thread to continue moving on
 
     } catch (const std::exception& e) {
-        std::cout << "Server error: " << e.what() << std::endl;
+        std::cerr << "Server error: " << e.what() << '\n';
+        control.disableRawMode(); // safety net if detached thread hasn't run yet
         return 1;
     }
     return 0;

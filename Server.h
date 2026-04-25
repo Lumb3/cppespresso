@@ -20,19 +20,7 @@
 constexpr int Buffer_size = 4096;
 
 /**
- * @class Server
- * @brief A multithreaded HTTP/1.1 server using a fixed-size thread pool.
  *
- * Accepts incoming TCP connections on a given port and dispatches each
- * client socket to a pool of worker threads. Supports basic routing for
- * GET and POST requests. Call Connect() to start and Disconnect() to stop.
- *
- * Example usage:
- * @code
- *   Server server;
- *   std::signal(SIGINT, [](int) { server.Disconnect(); });
- *   server.Connect(8080);
- * @endcode
  */
 class Server {
 
@@ -99,12 +87,14 @@ class Server {
      */
     void HandleClient(int clientSocket);
 
-public:
+    /**
+     *
+     * @param path
+     * @return
+     */
+    static std::string getMimeType(const std::string& path);
 
-    // -------------------------------------------------------------------------
     // HTTP data types
-    // -------------------------------------------------------------------------
-
     /**
      * @struct HttpRequest
      * @brief Represents a parsed inbound HTTP request.
@@ -150,10 +140,22 @@ public:
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Routing
-    // -------------------------------------------------------------------------
+    /**
+     *
+     * @param path
+     * @return
+     */
+    HttpResponse serveFile(const std::string& path);
 
+    /**
+     *
+     * @param requestedPath
+     * @return
+     */
+    std::string ResolvePath(const std::string& requestedPath);
+public:
+
+    // Routing
     /**
      * @brief Parses a raw HTTP request string into an HttpRequest struct.
      *
@@ -178,10 +180,8 @@ public:
      */
     HttpResponse handleRoute(const HttpRequest& req);
 
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
 
+    // Lifecycle
     /// @brief Constructs a Server in a non-running state.
     Server() = default;
 
@@ -206,6 +206,11 @@ public:
      * signal handler or a separate thread.
      */
     void Disconnect();
+
+    /**
+     *  Destructor that Disconnects server when it is running.
+     */
+    ~Server();
 };
 
 #endif // CPPESPRESSO_SERVER_H
