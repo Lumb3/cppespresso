@@ -5,4 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_executable(cppespresso main.cpp
         Server.cpp
-        Server.h)
+        Server.h
+        Controller.cpp
+        Controller.h)
