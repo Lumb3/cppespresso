@@ -115,7 +115,7 @@ class Server {
      */
     struct HttpResponse {
         int  status = 200;          /// HTTP status code.
-        std::string contentType = "text/plain"; /// Value for the Content-Type header.
+        std::string contentType = "text/plain"; /// Default content type: plain text
         std::string body;                       /// Response body.
 
         /**

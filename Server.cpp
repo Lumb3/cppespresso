@@ -91,6 +91,9 @@ std::string Server::ResolvePath(const std::string &requestedPath) {
     if (requestedPath == "/index") {
         return "./public/index.html";
     }
+    if (requestedPath == "/data") {
+        return "./public/data.json";
+    }
     return "/"; // Return the default path if not found
 }
 
@@ -99,6 +102,7 @@ Server::HttpResponse Server::serveFile(const std::string &path) {
     if (path == "/") {
         return res;
     }
+
     std::ifstream file(path, std::ios::binary);
     if (file) {
         res.body = std::string(std::istreambuf_iterator<char>(file), {});
