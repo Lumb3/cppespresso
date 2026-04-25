@@ -85,7 +85,7 @@ class Server {
      *
      * @param clientSocket File descriptor of the accepted client connection.
      */
-    void HandleClient(int clientSocket);
+    static void HandleClient(int clientSocket);
 
     /**
      *
@@ -114,9 +114,9 @@ class Server {
      * serialise to a wire-format string ready for send().
      */
     struct HttpResponse {
-        int  status = 200;          ///< HTTP status code.
-        std::string contentType = "text/plain"; ///< Value for the Content-Type header.
-        std::string body;                       ///< Response body.
+        int  status = 200;          /// HTTP status code.
+        std::string contentType = "text/plain"; /// Value for the Content-Type header.
+        std::string body;                       /// Response body.
 
         /**
          * @brief Serialises the response to an HTTP/1.1 wire-format string.
@@ -145,14 +145,14 @@ class Server {
      * @param path
      * @return
      */
-    HttpResponse serveFile(const std::string& path);
+    static HttpResponse serveFile(const std::string& path);
 
     /**
      *
      * @param requestedPath
      * @return
      */
-    std::string ResolvePath(const std::string& requestedPath);
+    static std::string ResolvePath(const std::string& requestedPath);
 public:
 
     // Routing
@@ -165,7 +165,7 @@ public:
      * @param raw The complete raw HTTP request string.
      * @return    A populated HttpRequest.
      */
-    HttpRequest parseRequest(const std::string& raw);
+    static HttpRequest parseRequest(const std::string& raw);
 
     /**
      * @brief Maps an HttpRequest to an HttpResponse based on method and path.
@@ -178,7 +178,7 @@ public:
      * @param req The parsed request to route.
      * @return    The appropriate HttpResponse.
      */
-    HttpResponse handleRoute(const HttpRequest& req);
+    static HttpResponse handleRoute(const HttpRequest& req);
 
 
     // Lifecycle

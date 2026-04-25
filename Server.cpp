@@ -119,14 +119,14 @@ Server::HttpResponse Server::handleRoute(const HttpRequest& req) {
     } else if (req.path == "/health") {
         res.body = "OK";
     } else if (req.method == "GET") {
-        std::string filePath = this->ResolvePath(req.path);
+        std::string filePath = ResolvePath(req.path);
 
         if (filePath.find("..") != std::string::npos) {
             res.status = 403;
             res.body = "Forbidden";
             return res;
         }
-        return this->serveFile(filePath);
+        return serveFile(filePath);
     }
     else {
         res.status = 404;
