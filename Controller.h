@@ -14,8 +14,11 @@
 
 class Controller {
 
+    // Default HTTP port used when no port is provided by configuration/CLI.
     static const int Default_port = 8080;
+    // ASCII control character for Ctrl+R, used to trigger live reload.
     static const char CTRL_R = 18; // ASCII 18 = Ctrl+R
+    // Saved terminal settings so raw mode can be reverted on shutdown.
     static termios originalTermios;
 
 
@@ -26,9 +29,14 @@ class Controller {
     static void enableRawMode();
 
 public:
-
-    static std::atomic <bool> shouldStop;
-    static std::atomic <bool> shouldReload;
+    /**
+     * @brief Set to true to stop the keyboard listener loop gracefully.
+     */
+    static std::atomic<bool> shouldStop;
+    /**
+     * @brief Set to true when Ctrl+R is detected to request a reload.
+     */
+    static std::atomic<bool> shouldReload;
 
     /**
     *  @brief Runs on a background thread; watches stdin for Ctrl+R.
@@ -38,6 +46,10 @@ public:
     */
     void keyboardListener();
 
+    /**
+     * @brief Returns the built-in fallback port number.
+     * @return Default port value.
+     */
     int getDefaultPort() const;
 
     /**
