@@ -493,3 +493,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 *.DotSettings
+
+# OF Files
+.DS_Store
