@@ -12,11 +12,11 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_executable(cppespresso main.cpp
         Server.cpp
-        Server.h
         Controller.cpp
-        Controller.h)
+)
 
 add_executable(UnitTests
-        tests/test1.cpp
+        tests/ServerTests.cpp
+        Server.cpp
 )
 target_link_libraries(UnitTests GTest::gtest_main)

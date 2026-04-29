@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <fstream>
 
-
 // Client handling
 void Server::HandleClient(int clientSocket) {
     // Prevent a slow or stalled client from holding a worker thread forever.

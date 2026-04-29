@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "gtest/gtest_prod.h"
 
 /// @brief Size (in bytes) of the read buffer used per client connection.
 constexpr int Buffer_size = 4096;
@@ -153,7 +154,6 @@ class Server {
      * @return
      */
     static std::string ResolvePath(const std::string& requestedPath);
-public:
 
     // Routing
     /**
@@ -180,6 +180,8 @@ public:
      */
     static HttpResponse handleRoute(const HttpRequest& req);
 
+    FRIEND_TEST(ServerTests, Status200ProducesOK);
+public:
 
     // Lifecycle
     /// @brief Constructs a Server in a non-running state.
@@ -212,5 +214,4 @@ public:
      */
     ~Server();
 };
-
 #endif // CPPESPRESSO_SERVER_H
