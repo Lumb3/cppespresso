@@ -181,6 +181,7 @@ class Server {
     static HttpResponse handleRoute(const HttpRequest& req);
 
     FRIEND_TEST(ServerTests, Status200ProducesOK);
+
 public:
 
     // Lifecycle
