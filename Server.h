@@ -21,7 +21,11 @@
 constexpr int Buffer_size = 4096;
 
 /**
+ * @brief File descriptor for the listening server socket.
  *
+ * Stored as an atomic int so Disconnect() can safely close it from a
+ * signal handler or a separate thread without a data race.
+ * Initialized to -1 to indicate no open socket.
  */
 class Server {
 
@@ -173,15 +177,18 @@ class Server {
      * Current routes:
      *  - POST /       → 200 with echoed body
      *  - GET  /health → 200 "OK"
-     *  - anything else → 404 "Not Found"
+     *  - anything else → Default Page
      *
      * @param req The parsed request to route.
      * @return    The appropriate HttpResponse.
      */
     static HttpResponse handleRoute(const HttpRequest& req);
 
+    /**
+     * Friend class test declarations for each private methods
+     */
     FRIEND_TEST(ServerTests, Status200ProducesOK);
-
+    FRIEND_TEST(ServerTests, Status404ProducesNotFound);
 public:
 
     // Lifecycle
