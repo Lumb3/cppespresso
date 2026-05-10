@@ -28,3 +28,5 @@ target_link_libraries(cppespresso core_lib)
 add_executable(UnitTests tests/ServerTests.cpp)
 
 target_link_libraries(UnitTests core_lib GTest::gtest_main)
+
+target_compile_definitions(UnitTests PRIVATE UNIT_TESTING)

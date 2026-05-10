@@ -15,7 +15,13 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "gtest/gtest_prod.h"
+
+
+#ifdef UNIT_TESTING
+    #include "gtest/gtest_prod.h"
+#else
+    #define FRIEND_TEST(test_case_name, test_name) static_assert(true, "");
+#endif
 
 /// @brief Size (in bytes) of the read buffer used per client connection.
 constexpr int Buffer_size = 4096;
@@ -23,17 +29,15 @@ constexpr int Buffer_size = 4096;
 /**
  * @brief File descriptor for the listening server socket.
  *
- * Stored as an atomic int so Disconnect() can safely close it from a
+ * Stored as an atomic int, so Disconnect() can safely close it from a
  * signal handler or a separate thread without a data race.
  * Initialized to -1 to indicate no open socket.
  */
 class Server {
 
-    // -------------------------------------------------------------------------
     // Thread pool
-    // -------------------------------------------------------------------------
 
-    /// @brief Fixed number of worker threads in the pool.
+    /// @brief Fixed the number of worker threads in the pool.
     static constexpr int THREAD_POOL_SIZE = 8;
 
     /// @brief Worker threads — created in Connect(), joined in Disconnect().
@@ -51,9 +55,8 @@ class Server {
     /// @brief Set to true while the thread pool is active; false signals workers to exit.
     std::atomic<bool> poolRunning{false};
 
-    // -------------------------------------------------------------------------
+
     // Server socket
-    // -------------------------------------------------------------------------
 
     /// @brief Whether the server accept loop is running.
     std::atomic<bool> is_running{false};
@@ -61,15 +64,13 @@ class Server {
     /**
      * @brief File descriptor for the listening server socket.
      *
-     * Stored as an atomic int so Disconnect() can safely close it from a
+     * Stored as an atomic int, so Disconnect() can safely close it from a
      * signal handler or a separate thread without a data race.
      * Initialized to -1 to indicate no open socket.
      */
     std::atomic<int> serverSocket{-1};
 
-    // -------------------------------------------------------------------------
     // Private methods
-    // -------------------------------------------------------------------------
 
     /**
      * @brief Entry point for each worker thread in the pool.
@@ -85,18 +86,64 @@ class Server {
      *
      * Reads in a loop until both headers and the declared Content-Length body
      * have been received, then parses and routes the request. A 5-second
-     * SO_RCVTIMEO is applied so a stalled client cannot hold the thread
+     * SO_RCVTIMEO is applied, so a stalled client cannot hold the thread
      * indefinitely. Closes clientSocket before returning.
      *
      * @param clientSocket File descriptor of the accepted client connection.
      */
     static void HandleClient(int clientSocket);
 
+
+
     /**
      *
-     * @param path
+     * @param requestedPath
      * @return
      */
+    static std::string ResolvePath(const std::string& requestedPath);
+
+
+
+    /**
+      * Friend class test declarations for each private methods
+      */
+    FRIEND_TEST(ServerTests, Status200ProducesOK);
+    FRIEND_TEST(ServerTests, Status404ProducesNotFound);
+    FRIEND_TEST(ServerTest, ContentLengthMatchesBodySize);
+
+public:
+
+    // Lifecycle
+    /// @brief Constructs a Server in a non-running state.
+    Server() = default;
+
+    /**
+     * @brief Starts the server: creates a socket, binds to port, and blocks
+     *        in the acceptance loop until Disconnect() is called.
+     *
+     * Spawns THREAD_POOL_SIZE worker threads before entering the acceptance loop.
+     * Each accepted connection is pushed onto the task queue and handled by
+     * the next available worker.
+     *
+     * @param port TCP port to listen on (e.g. 8080).
+     * @throws std::runtime_error if socket creation, bind, or listen fails.
+     */
+    void Connect(int port);
+
+    /**
+     * @brief Stops the server and releases all resources.
+     *
+     * Closes the server socket (causing the acceptance loop to exit), signals
+     * all worker threads to finish, and joins them. Safe to call from a
+     * signal handler or a separate thread.
+     */
+    void Disconnect();
+
+    /**
+    *
+    * @param path
+    * @return
+    */
     static std::string getMimeType(const std::string& path);
 
     // HTTP data types
@@ -146,18 +193,19 @@ class Server {
     };
 
     /**
-     *
-     * @param path
-     * @return
-     */
-    static HttpResponse serveFile(const std::string& path);
+    * @brief Maps an HttpRequest to an HttpResponse based on method and path.
+    *
+    * Current routes:
+    *  - POST /       → 200 with echoed body
+    *  - GET  /health → 200 "OK"
+    *  - anything else → Default Page
+    *
+    * @param req The parsed request to route.
+    * @return    The appropriate HttpResponse.
+    */
+    static HttpResponse handleRoute(const HttpRequest& req);
 
-    /**
-     *
-     * @param requestedPath
-     * @return
-     */
-    static std::string ResolvePath(const std::string& requestedPath);
+    static HttpResponse serveFile(const std::string& path);
 
     // Routing
     /**
@@ -172,53 +220,7 @@ class Server {
     static HttpRequest parseRequest(const std::string& raw);
 
     /**
-     * @brief Maps an HttpRequest to an HttpResponse based on method and path.
-     *
-     * Current routes:
-     *  - POST /       → 200 with echoed body
-     *  - GET  /health → 200 "OK"
-     *  - anything else → Default Page
-     *
-     * @param req The parsed request to route.
-     * @return    The appropriate HttpResponse.
-     */
-    static HttpResponse handleRoute(const HttpRequest& req);
-
-    /**
-     * Friend class test declarations for each private methods
-     */
-    FRIEND_TEST(ServerTests, Status200ProducesOK);
-    FRIEND_TEST(ServerTests, Status404ProducesNotFound);
-public:
-
-    // Lifecycle
-    /// @brief Constructs a Server in a non-running state.
-    Server() = default;
-
-    /**
-     * @brief Starts the server: creates a socket, binds to port, and blocks
-     *        in the accept loop until Disconnect() is called.
-     *
-     * Spawns THREAD_POOL_SIZE worker threads before entering the accept loop.
-     * Each accepted connection is pushed onto the task queue and handled by
-     * the next available worker.
-     *
-     * @param port TCP port to listen on (e.g. 8080).
-     * @throws std::runtime_error if socket creation, bind, or listen fails.
-     */
-    void Connect(int port);
-
-    /**
-     * @brief Stops the server and releases all resources.
-     *
-     * Closes the server socket (causing the accept loop to exit), signals
-     * all worker threads to finish, and joins them. Safe to call from a
-     * signal handler or a separate thread.
-     */
-    void Disconnect();
-
-    /**
-     *  Destructor that Disconnects server when it is running.
+     *  Destructor that Disconnects the server when it is running.
      */
     ~Server();
 };
