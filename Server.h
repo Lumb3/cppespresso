@@ -96,12 +96,28 @@ class Server {
 
 
     /**
-     *
-     * @param requestedPath
-     * @return
-     */
+    * @brief Converts a supported request path into a local file-system path.
+    *
+    * This method maps public HTTP paths such as "/index" or "/data" to files
+    * inside the server's public directory. If the path is not known, it returns
+    * "/" to indicate that no static file should be served.
+    *
+    * @param requestedPath The path received from the HTTP request.
+    * @return The matching local file path, or "/" when no route is matched.
+    */
     static std::string ResolvePath(const std::string& requestedPath);
 
+    /**
+    * @brief Returns the MIME type for a file path.
+    *
+    * The MIME type is selected from the file extension and is used as the
+    * Content-Type header in HTTP responses. Unknown extensions fall back to
+    * "application/octet-stream".
+    *
+    * @param path File path whose extension should be inspected.
+    * @return MIME type string suitable for an HTTP Content-Type header.
+    */
+    static std::string getMimeType(const std::string& path);
 
 
     /**
@@ -139,18 +155,15 @@ public:
      */
     void Disconnect();
 
-    /**
-    *
-    * @param path
-    * @return
-    */
-    static std::string getMimeType(const std::string& path);
 
     // HTTP data types
     /**
-     * @struct HttpRequest
-     * @brief Represents a parsed inbound HTTP request.
-     */
+        * @brief Represents a parsed inbound HTTP request.
+        *
+        * This structure stores the basic request data extracted from the raw HTTP
+        * request string. It does not perform validation by itself; parsing and
+        * validation are handled by parseRequest() and route handlers.
+        */
     struct HttpRequest {
         std::string method;   ///< HTTP verb (e.g. "GET", "POST").
         std::string path;     ///< Request path (e.g. "/health").
@@ -159,12 +172,13 @@ public:
     };
 
     /**
-     * @struct HttpResponse
-     * @brief Represents an outbound HTTP response.
-     *
-     * Populate status, contentType, and body, then call toString() to
-     * serialise to a wire-format string ready for send().
-     */
+      * @struct HttpResponse
+      * @brief Represents an outbound HTTP response.
+      *
+      * Populate status, contentType, and body, then call toString() to serialize
+      * the response into a valid HTTP/1.1 response string ready to be sent through
+      * the client socket.
+      */
     struct HttpResponse {
         int  status = 200;          /// HTTP status code.
         std::string contentType = "text/plain"; /// Default content type: plain text
@@ -205,18 +219,29 @@ public:
     */
     static HttpResponse handleRoute(const HttpRequest& req);
 
+    /**
+        * @brief Serves a static file as an HTTP response.
+        *
+        * Opens the given file path in binary mode, reads its full contents into the
+        * response body, and sets the response MIME type using getMimeType().
+        * If the file cannot be opened, a 404 response is returned.
+        *
+        * @param path Local file-system path to serve.
+        * @return HttpResponse containing the file data or a 404 error.
+        */
     static HttpResponse serveFile(const std::string& path);
 
     // Routing
     /**
-     * @brief Parses a raw HTTP request string into an HttpRequest struct.
-     *
-     * Extracts the method, path, header block, and body from the raw bytes
-     * received over the socket. Does not validate individual header values.
-     *
-     * @param raw The complete raw HTTP request string.
-     * @return    A populated HttpRequest.
-     */
+         * @brief Parses a raw HTTP request string into an HttpRequest struct.
+         *
+         * Extracts the method, path, header block, and body from the raw bytes
+         * received over the socket. This method assumes the request uses CRLF
+         * line endings and contains a standard HTTP request line.
+         *
+         * @param raw The complete raw HTTP request string.
+         * @return A populated HttpRequest.
+         */
     static HttpRequest parseRequest(const std::string& raw);
 
     /**
